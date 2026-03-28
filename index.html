@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Гитара Pro: Гриф и Тюнер</title>
+    <style>
+        /* 
+         * ==========================================
+         * CSS VARIABLES & THEMES
+         * ==========================================
+         */
+        :root {
+            --bg-color: #121212;
+            --surface-color: #1e1e1e;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent-color: #ffd700; 
+            --accent-glow: rgba(255, 215, 0, 0.6);
+            --fretboard-bg: #2a2a2a;
+            --fret-wire: #888;
+            --string-color: #ccc;
+            --note-bg-default: #333;
+            --note-text-default: #888;
+            --note-bg-active: #ffd700;
+            --note-text-active: #000;
+            --border-color: #333;
+            --toast-bg: #333;
+            
+            --tuner-green: #00e676;
+            --tuner-red: #ff5252;
+            --tuner-yellow: #ffeb3b;
+        }
+
+        body.light-theme {
+            --bg-color: #f0f2f5;
+            --surface-color: #ffffff;
+            --text-primary: #1a1a1a;
+            --text-secondary: #666666;
+            --accent-color: #d4a017;
+            --accent-glow: rgba(212, 160, 23, 0.4);
+            --fretboard-bg: #e0e0e0;
+            --fret-wire: #555;
+            --string-color: #555;
+            --note-bg-default: #ddd;
+            --note-text-default: #666;
+            --note-bg-active: #d4a017;
+            --note-text-active: #fff;
+            --border-color: #ccc;
+            --toast-bg: #fff;
+            --tuner-green: #2e7d32;
+            --tuner-red: #c62828;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            padding-bottom: 80px;
+        }
+
+        /* --- Header & Nav --- */
+        header {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        h1 { font-weight: 300; letter-spacing: 1px; font-size: 1.5rem; }
+
+        .theme-toggle {
+            background: none;
+            border: 2px solid var(--text-secondary);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .theme-toggle:hover { border-color: var(--accent-color); color: var(--accent-color); }
+
+        /* Tabs Navigation */
+        .tabs {
+            display: flex;
+            background-color: var(--surface-color);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            padding: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background-color: var(--accent-color);
+            color: var(--note-text-active);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* --- Views Container --- */
+        .view-container {
+            width: 100%;
+            max-width: 1000px;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .view-container.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* --- Fretboard Styles --- */
+        .controls-container {
+            background-color: var(--surface-color);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .controls-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+        .note-btn {
+            background-color: var(--bg-color); border: 1px solid var(--border-color);
+            color: var(--text-primary); padding: 8px 12px; border-radius: 6px;
+            cursor: pointer; font-weight: 600; font-size: 14px; min-width: 45px; text-align: center; user-select: none;
+        }
+        .note-btn:hover { border-color: var(--text-secondary); transform: translateY(-2px); }
+        .note-btn.active { background-color: var(--accent-color); color: var(--note-text-active); border-color: var(--accent-color); box-shadow: 0 0 10px var(--accent-glow); transform: scale(1.05); }
+        .note-btn.sharp { display: none; background-color: #2a2a2a; font-size: 12px; padding: 6px 10px; }
+        body.light-theme .note-btn.sharp { background-color: #eee; }
+        .note-btn.sharp.visible { display: block; animation: fadeIn 0.3s ease; }
+        .action-btn { background-color: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        .action-btn:hover { background-color: var(--border-color); }
+        .action-btn.primary { background-color: var(--accent-color); color: #000; border: none; }
+        .action-btn.primary:hover { opacity: 0.9; }
+
+        .fretboard-wrapper { width: 100%; overflow-x: auto; padding-bottom: 20px; scrollbar-width: thin; scrollbar-color: var(--text-secondary) var(--bg-color); }
+        .fretboard-wrapper::-webkit-scrollbar { height: 8px; }
+        .fretboard-wrapper::-webkit-scrollbar-track { background: var(--bg-color); }
+        .fretboard-wrapper::-webkit-scrollbar-thumb { background-color: var(--text-secondary); border-radius: 4px; }
+        .fretboard { display: grid; grid-template-columns: 60px repeat(15, 1fr); background-color: var(--fretboard-bg); border-radius: 4px; position: relative; min-width: 800px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 2px solid var(--border-color); }
+        .string-row { display: contents; }
+        .fret-cell { position: relative; border-right: 1px solid var(--fret-wire); display: flex; align-items: center; justify-content: center; height: 50px; }
+        .fret-cell.nut { border-right: 6px solid #d4a056; background: rgba(0,0,0,0.2); }
+        .fret-cell::before { content: ''; position: absolute; left: 0; right: 0; height: 1px; background-color: var(--string-color); z-index: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        .string-6 .fret-cell::before { height: 3.0px; } .string-5 .fret-cell::before { height: 2.6px; } .string-4 .fret-cell::before { height: 2.2px; } .string-3 .fret-cell::before { height: 1.8px; } .string-2 .fret-cell::before { height: 1.4px; } .string-1 .fret-cell::before { height: 1.0px; }
+        .fret-markers { grid-column: 1 / -1; grid-row: 1 / -1; pointer-events: none; z-index: 0; display: grid; grid-template-columns: 60px repeat(15, 1fr); grid-template-rows: repeat(6, 50px); }
+        .marker { width: 12px; height: 12px; background-color: var(--text-secondary); border-radius: 50%; position: absolute; transform: translate(-50%, -50%); opacity: 0.5; }
+        .marker-3 { left: calc(60px + 2.5fr); top: 150px; } .marker-5 { left: calc(60px + 4.5fr); top: 150px; } .marker-7 { left: calc(60px + 6.5fr); top: 150px; } .marker-9 { left: calc(60px + 8.5fr); top: 150px; } .marker-12-top { left: calc(60px + 11.5fr); top: 75px; } .marker-12-bottom { left: calc(60px + 11.5fr); top: 225px; } .marker-15 { left: calc(60px + 14.5fr); top: 150px; }
+        .note-dot { width: 32px; height: 32px; border-radius: 50%; background-color: var(--note-bg-default); color: var(--note-text-default); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; z-index: 2; transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: scale(0.8); box-shadow: 0 2px 5px rgba(0,0,0,0.3); border: 1px solid transparent; cursor: pointer; user-select: none; }
+        .note-dot:hover { transform: scale(1.0); z-index: 5; }
+        .note-dot:active { transform: scale(0.9); }
+        .note-dot:not(.highlighted) { opacity: var(--opacity-dimmed, 0.15); }
+        .note-dot.sharp-note:not(.highlighted) { opacity: var(--opacity-sharp-dimmed, 0.05); }
+        body.sharps-mode .note-dot.sharp-note:not(.highlighted) { opacity: var(--opacity-sharp-visible, 0.4); transform: scale(0.9); }
+        .note-dot.highlighted { opacity: 1 !important; background-color: var(--note-bg-active); color: var(--note-text-active); transform: scale(1.2); box-shadow: 0 0 20px var(--accent-glow), inset 0 0 5px rgba(255,255,255,0.3); z-index: 10; border-color: #fff; }
+        .note-dot.clicked-anim { animation: pulse-gold 0.4s ease-out; }
+        @keyframes pulse-gold { 0% { transform: scale(1.2); box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7); } 70% { transform: scale(1.3); box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); } 100% { transform: scale(1.2); box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); } }
+        .fret-numbers { display: grid; grid-template-columns: 60px repeat(15, 1fr); margin-top: 10px; color: var(--text-secondary); font-size: 12px; text-align: center; min-width: 800px; }
+        .fret-num { padding-top: 5px; }
+
+        /* Toast */
+        .toast-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background-color: var(--toast-bg); color: var(--text-primary); padding: 15px 25px; border-radius: 50px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 15px; opacity: 0; transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 1000; border: 1px solid var(--border-color); min-width: 280px; justify-content: center; }
+        .toast-container.active { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .toast-note { font-size: 1.5rem; font-weight: bold; color: var(--accent-color); min-width: 40px; text-align: center; }
+        .toast-info { display: flex; flex-direction: column; font-size: 0.9rem; line-height: 1.2; }
+        .toast-info span { color: var(--text-secondary); font-size: 0.8rem; }
+
+        /* --- TUNER STYLES --- */
+        .tuner-interface {
+            background-color: var(--surface-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .tuner-display {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            height: 200px;
+            background: radial-gradient(circle at center, #2a2a2a 0%, #1a1a1a 100%);
+            border-radius: 12px;
+            border: 2px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        body.light-theme .tuner-display {
+            background: radial-gradient(circle at center, #e0e0e0 0%, #bdbdbd 100%);
+        }
+
+        .tuner-needle-container {
+            position: absolute;
+            bottom: 20px;
+            width: 80%;
+            height: 4px;
+            background-color: #444;
+            border-radius: 2px;
+        }
+        
+        .tuner-needle {
+            position: absolute;
+            left: 50%;
+            bottom: -10px;
+            width: 4px;
+            height: 60px;
+            background-color: var(--tuner-red);
+            transform-origin: bottom center;
+            /* Добавлено transition для плавности */
+            transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), background-color 0.2s;
+            border-radius: 2px;
+            z-index: 10;
+        }
+
+        .tuner-center-mark {
+            position: absolute;
+            left: 50%;
+            bottom: -2px;
+            width: 2px;
+            height: 10px;
+            background-color: var(--tuner-green);
+            transform: translateX(-50%);
+            z-index: 11;
+        }
+
+        .tuner-readout {
+            z-index: 20;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .tuner-note-big {
+            font-size: 4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+
+        .tuner-freq {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .tuner-status {
+            font-size: 1rem;
+            font-weight: bold;
+            margin-top: 5px;
+            min-height: 1.2em;
+        }
+        .status-in-tune { color: var(--tuner-green); }
+        .status-flat { color: var(--tuner-red); }
+        .status-sharp { color: var(--tuner-red); }
+
+        .tuner-controls {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .tuner-mode-switch {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* Global Transpose Controls */
+        .transpose-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            background: var(--bg-color);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .transpose-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: var(--surface-color);
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .transpose-btn:active { transform: scale(0.95); }
+        .transpose-value {
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+            color: var(--accent-color);
+        }
+
+        .string-config-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .string-config-row:last-child { border-bottom: none; }
+
+        .string-label {
+            font-weight: bold;
+            color: var(--text-secondary);
+            width: 80px;
+        }
+
+        .string-select {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 5px 10px;
+            border-radius: 4px;
+            flex: 1;
+            max-width: 150px;
+        }
+
+        .mic-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .mic-btn.listening {
+            background-color: var(--tuner-red);
+            color: white;
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
+
+        .https-warning {
+            background-color: rgba(255, 82, 82, 0.2);
+            color: var(--tuner-red);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            text-align: center;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            .tuner-display { height: 180px; }
+            .tuner-note-big { font-size: 3rem; }
+            .tabs { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Гитара Pro</h1>
+        <button class="theme-toggle" id="themeToggle" title="Сменить тему">🌙</button>
+    </header>
+
+    <!-- Навигация -->
+    <nav class="tabs">
+        <button class="tab-btn active" onclick="switchTab('fretboard')">Гриф</button>
+        <button class="tab-btn" onclick="switchTab('tuner')">Тюнер</button>
+    </nav>
+
+    <!-- Вкладка: ГРИФ -->
+    <div id="view-fretboard" class="view-container active">
+        <div class="controls-container">
+            <div class="controls-top">
+                <div class="controls" id="controls">
+                    <!-- Кнопки генерируются JS -->
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="action-btn" id="toggleSharpsBtn">Show Sharps (#)</button>
+                    <button class="action-btn primary" onclick="showAllNotes()">Show All</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="fretboard-wrapper">
+            <div class="fretboard" id="fretboard">
+                <div class="fret-markers">
+                    <div class="marker marker-3"></div>
+                    <div class="marker marker-5"></div>
+                    <div class="marker marker-7"></div>
+                    <div class="marker marker-9"></div>
+                    <div class="marker marker-12-top"></div>
+                    <div class="marker marker-12-bottom"></div>
+                    <div class="marker marker-15"></div>
+                </div>
+            </div>
+            <div class="fret-numbers" id="fretNumbers"></div>
+        </div>
+    </div>
+
+    <!-- Вкладка: ТЮНЕР -->
+    <div id="view-tuner" class="view-container">
+        <div class="tuner-interface">
+            
+            <div id="httpsWarning" class="https-warning">
+                ⚠️ Для работы микрофона откройте сайт по HTTPS или на localhost.
+            </div>
+
+            <div class="tuner-mode-switch">
+                <button class="action-btn primary" id="modeChromatic" onclick="setTunerMode('chromatic')">Хроматический</button>
+                <button class="action-btn" id="modeGuitar" onclick="setTunerMode('guitar')">По струнам</button>
+            </div>
+
+            <div class="tuner-display">
+                <div class="tuner-readout">
+                    <div class="tuner-note-big" id="tunerNote">--</div>
+                    <div class="tuner-freq" id="tunerFreq">0 Hz</div>
+                    <div class="tuner-status" id="tunerStatus"></div>
+                </div>
+                
+                <div class="tuner-needle-container">
+                    <div class="tuner-center-mark"></div>
+                    <div class="tuner-needle" id="tunerNeedle"></div>
+                </div>
+            </div>
+
+            <button class="mic-btn" id="micBtn" onclick="toggleMicrophone()">
+                <span>🎤 Включить микрофон</span>
+            </button>
+
+            <div class="tuner-controls">
+                <!-- Глобальная транспозиция -->
+                <div class="transpose-control">
+                    <button class="transpose-btn" onclick="changeGlobalTranspose(-1)">♭</button>
+                    <div class="transpose-value" id="transposeValue">Стандарт (0)</div>
+                    <button class="transpose-btn" onclick="changeGlobalTranspose(1)">♯</button>
+                </div>
+
+                <div id="stringConfigs">
+                    <!-- Конфигурация струн генерируется JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Всплывающее уведомление (для грифа) -->
+    <div class="toast-container" id="toast">
+        <div class="toast-note" id="toastNoteName">C</div>
+        <div class="toast-info">
+            <div id="toastDetails">6-я струна, 8-й лад</div>
+            <span>Нажми, чтобы узнать ноту</span>
+        </div>
+    </div>
+
+    <script>
+        /* 
+         * ==========================================
+         * GLOBAL & SHARED LOGIC
+         * ==========================================
+         */
+        const CHROMATIC_SCALE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const BUTTON_NOTES = CHROMATIC_SCALE.slice().sort((a, b) => a.localeCompare(b));
+        const OPEN_STRINGS = ['E', 'A', 'D', 'G', 'B', 'E'];
+        const TOTAL_FRETS = 15;
+
+        // State for Fretboard
+        let fretboardState = {
+            showSharps: false,
+            currentFilter: null,
+            isShowAllMode: false
+        };
+
+        // State for Tuner
+        let tunerState = {
+            isListening: false,
+            mode: 'chromatic',
+            audioContext: null,
+            analyser: null,
+            mediaStream: null,
+            rafId: null,
+            globalTranspose: 0, // Сдвиг в полутонах
+            // Базовый строй (Standard)
+            baseStringTargets: [
+                { note: 'E', octave: 2 },
+                { note: 'A', octave: 2 },
+                { note: 'D', octave: 3 },
+                { note: 'G', octave: 3 },
+                { note: 'B', octave: 3 },
+                { note: 'E', octave: 4 }
+            ],
+            // Актуальные цели с учетом транспозиции
+            currentStringTargets: [] 
+        };
+
+        // DOM Elements
+        const fretboardEl = document.getElementById('fretboard');
+        const controlsEl = document.getElementById('controls');
+        const fretNumbersEl = document.getElementById('fretNumbers');
+        const toggleSharpsBtn = document.getElementById('toggleSharpsBtn');
+        const themeToggleBtn = document.getElementById('themeToggle');
+        const toastEl = document.getElementById('toast');
+        const toastNoteNameEl = document.getElementById('toastNoteName');
+        const toastDetailsEl = document.getElementById('toastDetails');
+        
+        // Tuner DOM
+        const tunerNoteEl = document.getElementById('tunerNote');
+        const tunerFreqEl = document.getElementById('tunerFreq');
+        const tunerStatusEl = document.getElementById('tunerStatus');
+        const tunerNeedleEl = document.getElementById('tunerNeedle');
+        const micBtn = document.getElementById('micBtn');
+        const stringConfigsEl = document.getElementById('stringConfigs');
+        const httpsWarningEl = document.getElementById('httpsWarning');
+        const transposeValueEl = document.getElementById('transposeValue');
+
+        let toastTimeout;
+
+        /* 
+         * ==========================================
+         * INITIALIZATION
+         * ==========================================
+         */
+        function init() {
+            if (!window.isSecureContext) {
+                httpsWarningEl.style.display = 'block';
+            }
+
+            // Fretboard Init
+            renderControls();
+            renderFretboard();
+            renderFretNumbers();
+            updateFretboardVisuals();
+
+            // Tuner Init
+            calculateCurrentTargets(); // Apply base targets
+            renderStringConfigs();
+            
+            // Theme Init
+            themeToggleBtn.addEventListener('click', () => {
+                document.body.classList.toggle('light-theme');
+                const isLight = document.body.classList.contains('light-theme');
+                themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+            });
+        }
+
+        /* 
+         * ==========================================
+         * TAB SWITCHING
+         * ==========================================
+         */
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            document.querySelectorAll('.view-container').forEach(view => view.classList.remove('active'));
+            document.getElementById(`view-${tabName}`).classList.add('active');
+        }
+
+        /* 
+         * ==========================================
+         * FRETBOARD LOGIC
+         * ==========================================
+         */
+        function getNoteIndex(note) { return CHROMATIC_SCALE.indexOf(note); }
+        function calculateNote(openStringNote, fretNumber) {
+            const startIndex = getNoteIndex(openStringNote);
+            const noteIndex = (startIndex + fretNumber) % 12;
+            return CHROMATIC_SCALE[noteIndex];
+        }
+        function isSharp(note) { return note.includes('#'); }
+
+        function renderControls() {
+            controlsEl.innerHTML = '';
+            BUTTON_NOTES.forEach(note => {
+                const btn = document.createElement('button');
+                btn.className = 'note-btn';
+                if (isSharp(note)) {
+                    btn.classList.add('sharp');
+                    if (fretboardState.showSharps) btn.classList.add('visible');
+                }
+                btn.textContent = note;
+                btn.dataset.note = note;
+                btn.onclick = () => filterNotes(note, btn);
+                controlsEl.appendChild(btn);
+            });
+        }
+
+        function renderFretboard() {
+            OPEN_STRINGS.forEach((openNote, stringIndex) => {
+                const stringRow = document.createElement('div');
+                stringRow.className = `string-row string-${6 - stringIndex}`;
+                for (let fret = 0; fret <= TOTAL_FRETS; fret++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'fret-cell';
+                    if (fret === 0) cell.classList.add('nut');
+                    const noteName = calculateNote(openNote, fret);
+                    const noteDot = document.createElement('div');
+                    noteDot.className = 'note-dot';
+                    if (isSharp(noteName)) noteDot.classList.add('sharp-note');
+                    noteDot.textContent = noteName;
+                    noteDot.dataset.note = noteName;
+                    noteDot.dataset.string = 6 - stringIndex;
+                    noteDot.dataset.fret = fret;
+                    noteDot.onclick = (e) => handleNoteClick(e, noteName, 6 - stringIndex, fret);
+                    cell.appendChild(noteDot);
+                    stringRow.appendChild(cell);
+                }
+                fretboardEl.appendChild(stringRow);
+            });
+        }
+
+        function renderFretNumbers() {
+            const empty = document.createElement('div');
+            fretNumbersEl.appendChild(empty);
+            for (let i = 1; i <= TOTAL_FRETS; i++) {
+                const num = document.createElement('div');
+                num.className = 'fret-num';
+                num.textContent = i;
+                fretNumbersEl.appendChild(num);
+            }
+        }
+
+        function handleNoteClick(e, noteName, stringNum, fretNum) {
+            e.stopPropagation();
+            const dot = e.target;
+            dot.classList.remove('clicked-anim');
+            void dot.offsetWidth;
+            dot.classList.add('clicked-anim');
+            showToast(noteName, stringNum, fretNum);
+        }
+
+        function showToast(note, string, fret) {
+            toastNoteNameEl.textContent = note;
+            let stringText = '';
+            switch(string) {
+                case 6: stringText = '6-я (Ми)'; break; case 5: stringText = '5-я (Ля)'; break;
+                case 4: stringText = '4-я (Ре)'; break; case 3: stringText = '3-я (Соль)'; break;
+                case 2: stringText = '2-я (Си)'; break; case 1: stringText = '1-я (Ми)'; break;
+            }
+            const fretText = fret === 0 ? 'Открытая струна' : `${fret}-й лад`;
+            toastDetailsEl.textContent = `${stringText}, ${fretText}`;
+            toastEl.classList.add('active');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => toastEl.classList.remove('active'), 2500);
+        }
+
+        toggleSharpsBtn.addEventListener('click', () => {
+            fretboardState.showSharps = !fretboardState.showSharps;
+            document.body.classList.toggle('sharps-mode', fretboardState.showSharps);
+            const sharpBtns = document.querySelectorAll('.note-btn.sharp');
+            sharpBtns.forEach(btn => {
+                if (fretboardState.showSharps) btn.classList.add('visible');
+                else btn.classList.remove('visible');
+            });
+            toggleSharpsBtn.textContent = fretboardState.showSharps ? 'Hide Sharps' : 'Show Sharps (#)';
+            toggleSharpsBtn.classList.toggle('primary', fretboardState.showSharps);
+            if (fretboardState.isShowAllMode) showAllNotes();
+            else updateFretboardVisuals();
+        });
+
+        function filterNotes(targetNote, clickedBtn) {
+            fretboardState.isShowAllMode = false;
+            fretboardState.currentFilter = targetNote;
+            document.querySelectorAll('.note-btn').forEach(btn => btn.classList.remove('active'));
+            clickedBtn.classList.add('active');
+            updateFretboardVisuals();
+        }
+
+        function showAllNotes() {
+            fretboardState.isShowAllMode = true;
+            fretboardState.currentFilter = null;
+            document.querySelectorAll('.note-btn').forEach(btn => btn.classList.remove('active'));
+            updateFretboardVisuals();
+        }
+
+        function updateFretboardVisuals() {
+            const allDots = document.querySelectorAll('.note-dot');
+            allDots.forEach(dot => {
+                const noteOnFret = dot.dataset.note;
+                const isSharpOnFret = dot.classList.contains('sharp-note');
+                dot.classList.remove('highlighted');
+                if (fretboardState.isShowAllMode) {
+                    if (!isSharpOnFret) dot.classList.add('highlighted');
+                    else if (fretboardState.showSharps) dot.classList.add('highlighted');
+                } else if (fretboardState.currentFilter) {
+                    if (noteOnFret === fretboardState.currentFilter) dot.classList.add('highlighted');
+                }
+            });
+        }
+
+        /* 
+         * ==========================================
+         * TUNER LOGIC (UPDATED)
+         * ==========================================
+         */
+
+        // Helper: Calculate frequency from Note + Octave + Transpose
+        function getFrequencyFromNote(note, octave, transposeSemitones = 0) {
+            const noteMap = { 'C':0, 'C#':1, 'D':2, 'D#':3, 'E':4, 'F':5, 'F#':6, 'G':7, 'G#':8, 'A':9, 'A#':10, 'B':11 };
+            // MIDI Note Number calculation
+            let midiNote = (octave + 1) * 12 + noteMap[note];
+            midiNote += transposeSemitones;
+            // f = 440 * 2^((n-69)/12)
+            return 440 * Math.pow(2, (midiNote - 69) / 12);
+        }
+
+        // Helper: Get Note Name from MIDI number
+        function getNoteNameFromMidi(midi) {
+            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            return notes[midi % 12];
+        }
+        
+        // Helper: Get Octave from MIDI number
+        function getOctaveFromMidi(midi) {
+            return Math.floor(midi / 12) - 1;
+        }
+
+        // 1. Render String Configs
+        function renderStringConfigs() {
+            stringConfigsEl.innerHTML = '';
+            tunerState.currentStringTargets.forEach((target, index) => {
+                const row = document.createElement('div');
+                row.className = 'string-config-row';
+                
+                const label = document.createElement('div');
+                label.className = 'string-label';
+                label.textContent = `Струна ${6 - index}`;
+                
+                const select = document.createElement('select');
+                select.className = 'string-select';
+                select.dataset.index = index;
+                
+                const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                const octaves = [2, 3, 4, 5];
+                
+                notes.forEach(n => {
+                    octaves.forEach(o => {
+                        const option = document.createElement('option');
+                        option.value = `${n}${o}`;
+                        option.textContent = `${n}${o}`;
+                        if (n === target.note && o === target.octave) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                });
+
+                select.addEventListener('change', (e) => {
+                    updateStringTarget(index, e.target.value);
+                });
+
+                row.appendChild(label);
+                row.appendChild(select);
+                stringConfigsEl.appendChild(row);
+            });
+        }
+
+        function updateStringTarget(index, value) {
+            const note = value.slice(0, -1);
+            const octave = parseInt(value.slice(-1));
+            const freq = getFrequencyFromNote(note, octave, tunerState.globalTranspose);
+            
+            tunerState.currentStringTargets[index] = { note, octave, freq };
+            // Also update base target to keep consistency if user switches transpose later
+            tunerState.baseStringTargets[index] = { note, octave };
+        }
+
+        // 2. Global Transpose Logic
+        function changeGlobalTranspose(delta) {
+            tunerState.globalTranspose += delta;
+            
+            // Update Text
+            let text = "Стандарт (0)";
+            if (tunerState.globalTranspose > 0) text = `+${tunerState.globalTranspose} полутона`;
+            if (tunerState.globalTranspose < 0) text = `${tunerState.globalTranspose} полутонов`;
+            transposeValueEl.textContent = text;
+
+            // Recalculate all frequencies
+            calculateCurrentTargets();
+            
+            // Update Selectors UI to match new targets
+            const selects = document.querySelectorAll('.string-select');
+            selects.forEach((select, idx) => {
+                const target = tunerState.currentStringTargets[idx];
+                select.value = `${target.note}${target.octave}`;
+            });
+        }
+
+        function calculateCurrentTargets() {
+            tunerState.currentStringTargets = tunerState.baseStringTargets.map(base => {
+                const freq = getFrequencyFromNote(base.note, base.octave, tunerState.globalTranspose);
+                return { ...base, freq };
+            });
+        }
+
+        function setTunerMode(mode) {
+            tunerState.mode = mode;
+            document.getElementById('modeChromatic').classList.toggle('primary', mode === 'chromatic');
+            document.getElementById('modeGuitar').classList.toggle('primary', mode === 'guitar');
+            document.getElementById('modeChromatic').classList.toggle('action-btn', mode !== 'chromatic');
+            document.getElementById('modeGuitar').classList.toggle('action-btn', mode !== 'guitar');
+        }
+
+        // 3. Audio Handling
+        async function toggleMicrophone() {
+            if (tunerState.isListening) {
+                stopMicrophone();
+            } else {
+                startMicrophone();
+            }
+        }
+
+        async function startMicrophone() {
+            try {
+                tunerState.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                tunerState.analyser = tunerState.audioContext.createAnalyser();
+                tunerState.analyser.fftSize = 2048;
+                
+                tunerState.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = tunerState.audioContext.createMediaStreamSource(tunerState.mediaStream);
+                source.connect(tunerState.analyser);
+                
+                tunerState.isListening = true;
+                micBtn.innerHTML = '<span>⏹ Остановить</span>';
+                micBtn.classList.add('listening');
+                
+                updatePitch();
+            } catch (err) {
+                console.error("Mic Error:", err);
+                alert("Не удалось получить доступ к микрофону. Проверьте разрешения и HTTPS.");
+            }
+        }
+
+        function stopMicrophone() {
+            if (tunerState.mediaStream) {
+                tunerState.mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (tunerState.audioContext) {
+                tunerState.audioContext.close();
+            }
+            if (tunerState.rafId) {
+                cancelAnimationFrame(tunerState.rafId);
+            }
+            
+            tunerState.isListening = false;
+            micBtn.innerHTML = '<span>🎤 Включить микрофон</span>';
+            micBtn.classList.remove('listening');
+            
+            tunerNoteEl.textContent = "--";
+            tunerFreqEl.textContent = "0 Hz";
+            tunerStatusEl.textContent = "";
+            tunerNeedleEl.style.transform = "translateX(-50%) rotate(0deg)";
+            tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+        }
+
+        // 4. Pitch Detection (Autocorrelation)
+        function autoCorrelate(buf, sampleRate) {
+            let SIZE = buf.length;
+            let rms = 0;
+
+            for (let i = 0; i < SIZE; i++) {
+                let val = buf[i];
+                rms += val * val;
+            }
+            rms = Math.sqrt(rms / SIZE);
+            if (rms < 0.01) return -1;
+
+            let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+            for (let i = 0; i < SIZE / 2; i++) {
+                if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+            }
+            for (let i = 1; i < SIZE / 2; i++) {
+                if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+            }
+
+            buf = buf.slice(r1, r2);
+            SIZE = buf.length;
+
+            let c = new Array(SIZE).fill(0);
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE - i; j++) {
+                    c[i] = c[i] + buf[j] * buf[j + i];
+                }
+            }
+
+            let d = 0;
+            while (c[d] > c[d + 1]) d++;
+            let maxval = -1, maxpos = -1;
+            for (let i = d; i < SIZE; i++) {
+                if (c[i] > maxval) {
+                    maxval = c[i];
+                    maxpos = i;
+                }
+            }
+            let T0 = maxpos;
+
+            let x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+            let a = (x1 + x3 - 2 * x2) / 2;
+            let b = (x3 - x1) / 2;
+            if (a) T0 = T0 - b / (2 * a);
+
+            return sampleRate / T0;
+        }
+
+        // 5. Animation Loop with Smoothing Buffer
+        let freqBuffer = [];
+        const BUFFER_SIZE = 10; // Усредняем последние 10 кадров
+
+        function updatePitch() {
+            if (!tunerState.isListening) return;
+
+            const buf = new Float32Array(tunerState.analyser.fftSize);
+            tunerState.analyser.getFloatTimeDomainData(buf);
+            
+            const ac = autoCorrelate(buf, tunerState.audioContext.sampleRate);
+            
+            if (ac !== -1 && ac > 50 && ac < 2000) { // Valid frequency range
+                freqBuffer.push(ac);
+                if (freqBuffer.length > BUFFER_SIZE) {
+                    freqBuffer.shift();
+                }
+            }
+
+            // Calculate average from buffer
+            if (freqBuffer.length > 0) {
+                const sum = freqBuffer.reduce((a, b) => a + b, 0);
+                const smoothFreq = sum / freqBuffer.length;
+
+                const noteNum = Math.round(12 * (Math.log(smoothFreq / 440) / Math.log(2)) + 69);
+                const noteName = CHROMATIC_SCALE[noteNum % 12];
+                
+                // Determine Target based on mode
+                let targetFreq = 440 * Math.pow(2, (noteNum - 69) / 12);
+                let targetNoteName = noteName;
+                let cents = 0;
+
+                if (tunerState.mode === 'guitar') {
+                    let closestDist = Infinity;
+                    let closestTarget = null;
+                    
+                    tunerState.currentStringTargets.forEach(t => {
+                        const dist = Math.abs(t.freq - smoothFreq);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closestTarget = t;
+                        }
+                    });
+
+                    if (closestTarget && closestDist < 60) { 
+                        targetFreq = closestTarget.freq;
+                        targetNoteName = closestTarget.note;
+                        // Recalculate cents specifically against this target
+                        cents = 1200 * Math.log2(smoothFreq / targetFreq);
+                    } else {
+                        // Fallback to chromatic cents if far from any string target
+                        cents = 1200 * Math.log2(smoothFreq / targetFreq);
+                    }
+                } else {
+                    cents = 1200 * Math.log2(smoothFreq / targetFreq);
+                }
+
+                // Update UI
+                tunerNoteEl.textContent = targetNoteName;
+                tunerFreqEl.textContent = Math.round(smoothFreq) + " Hz";
+                
+                // Needle Logic
+                let rotation = cents * 0.9; 
+                if (rotation > 45) rotation = 45;
+                if (rotation < -45) rotation = -45;
+
+                tunerNeedleEl.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+
+                // Status & Color
+                if (Math.abs(cents) < 5) {
+                    tunerStatusEl.textContent = "В норме";
+                    tunerStatusEl.className = "tuner-status status-in-tune";
+                    tunerNeedleEl.style.backgroundColor = "var(--tuner-green)";
+                } else if (cents < 0) {
+                    tunerStatusEl.textContent = "Ниже (Flat)";
+                    tunerStatusEl.className = "tuner-status status-flat";
+                    tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+                } else {
+                    tunerStatusEl.textContent = "Выше (Sharp)";
+                    tunerStatusEl.className = "tuner-status status-sharp";
+                    tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+                }
+            }
+
+            tunerState.rafId = requestAnimationFrame(updatePitch);
+        }
+
+        // Start App
+        init();
+
+    </script>
+</body>
+</html>
