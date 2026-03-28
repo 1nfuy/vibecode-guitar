@@ -30,6 +30,8 @@
             --tuner-green: #00e676;
             --tuner-red: #ff5252;
             --tuner-yellow: #ffeb3b;
+            --volume-bar-bg: #444;
+            --volume-bar-fill: var(--tuner-green);
         }
 
         body.light-theme {
@@ -50,6 +52,7 @@
             --toast-bg: #fff;
             --tuner-green: #2e7d32;
             --tuner-red: #c62828;
+            --volume-bar-bg: #ddd;
         }
 
         * {
@@ -245,7 +248,6 @@
             height: 60px;
             background-color: var(--tuner-red);
             transform-origin: bottom center;
-            /* Добавлено transition для плавности */
             transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), background-color 0.2s;
             border-radius: 2px;
             z-index: 10;
@@ -397,6 +399,70 @@
             display: none;
         }
 
+        /* Volume Meter & Noise Gate Styles */
+        .volume-control-group {
+            width: 100%;
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .volume-meter-container {
+            width: 100%;
+            height: 8px;
+            background-color: var(--volume-bar-bg);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            position: relative;
+        }
+
+        .volume-meter-fill {
+            height: 100%;
+            width: 0%;
+            background-color: var(--volume-bar-fill);
+            transition: width 0.05s linear;
+        }
+
+        /* Линия порога на метре громкости */
+        .threshold-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: var(--tuner-red);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .noise-gate-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .noise-gate-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            background: var(--border-color);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .noise-gate-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--text-primary);
+            cursor: pointer;
+            border: 2px solid var(--bg-color);
+        }
+
         @media (max-width: 600px) {
             .tuner-display { height: 180px; }
             .tuner-note-big { font-size: 3rem; }
@@ -473,6 +539,19 @@
                 </div>
             </div>
 
+            <!-- Контроль громкости и шумоподавления -->
+            <div class="volume-control-group">
+                <div class="volume-meter-container">
+                    <div class="threshold-marker" id="thresholdMarker"></div>
+                    <div class="volume-meter-fill" id="volumeMeterFill"></div>
+                </div>
+                <div class="noise-gate-slider-container">
+                    <span>Чувствительность:</span>
+                    <input type="range" min="0.01" max="0.5" step="0.01" value="0.05" class="noise-gate-slider" id="noiseGateSlider">
+                    <span id="noiseGateValue">5%</span>
+                </div>
+            </div>
+
             <button class="mic-btn" id="micBtn" onclick="toggleMicrophone()">
                 <span>🎤 Включить микрофон</span>
             </button>
@@ -527,8 +606,8 @@
             analyser: null,
             mediaStream: null,
             rafId: null,
-            globalTranspose: 0, // Сдвиг в полутонах
-            // Базовый строй (Standard)
+            globalTranspose: 0,
+            noiseGateThreshold: 0.05, // Порог громкости (RMS)
             baseStringTargets: [
                 { note: 'E', octave: 2 },
                 { note: 'A', octave: 2 },
@@ -537,7 +616,6 @@
                 { note: 'B', octave: 3 },
                 { note: 'E', octave: 4 }
             ],
-            // Актуальные цели с учетом транспозиции
             currentStringTargets: [] 
         };
 
@@ -560,6 +638,12 @@
         const stringConfigsEl = document.getElementById('stringConfigs');
         const httpsWarningEl = document.getElementById('httpsWarning');
         const transposeValueEl = document.getElementById('transposeValue');
+        
+        // Volume & Noise Gate DOM
+        const volumeMeterFill = document.getElementById('volumeMeterFill');
+        const thresholdMarker = document.getElementById('thresholdMarker');
+        const noiseGateSlider = document.getElementById('noiseGateSlider');
+        const noiseGateValue = document.getElementById('noiseGateValue');
 
         let toastTimeout;
 
@@ -580,7 +664,7 @@
             updateFretboardVisuals();
 
             // Tuner Init
-            calculateCurrentTargets(); // Apply base targets
+            calculateCurrentTargets();
             renderStringConfigs();
             
             // Theme Init
@@ -589,6 +673,20 @@
                 const isLight = document.body.classList.contains('light-theme');
                 themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
             });
+
+            // Noise Gate Slider Init
+            updateThresholdUI();
+            noiseGateSlider.addEventListener('input', (e) => {
+                tunerState.noiseGateThreshold = parseFloat(e.target.value);
+                updateThresholdUI();
+            });
+        }
+
+        function updateThresholdUI() {
+            // Convert 0.01-0.5 range to percentage for UI
+            const percent = (tunerState.noiseGateThreshold / 0.5) * 100;
+            thresholdMarker.style.left = `${percent}%`;
+            noiseGateValue.textContent = `${Math.round(percent)}%`;
         }
 
         /* 
@@ -738,32 +836,17 @@
 
         /* 
          * ==========================================
-         * TUNER LOGIC (UPDATED)
+         * TUNER LOGIC
          * ==========================================
          */
 
-        // Helper: Calculate frequency from Note + Octave + Transpose
         function getFrequencyFromNote(note, octave, transposeSemitones = 0) {
             const noteMap = { 'C':0, 'C#':1, 'D':2, 'D#':3, 'E':4, 'F':5, 'F#':6, 'G':7, 'G#':8, 'A':9, 'A#':10, 'B':11 };
-            // MIDI Note Number calculation
             let midiNote = (octave + 1) * 12 + noteMap[note];
             midiNote += transposeSemitones;
-            // f = 440 * 2^((n-69)/12)
             return 440 * Math.pow(2, (midiNote - 69) / 12);
         }
 
-        // Helper: Get Note Name from MIDI number
-        function getNoteNameFromMidi(midi) {
-            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-            return notes[midi % 12];
-        }
-        
-        // Helper: Get Octave from MIDI number
-        function getOctaveFromMidi(midi) {
-            return Math.floor(midi / 12) - 1;
-        }
-
-        // 1. Render String Configs
         function renderStringConfigs() {
             stringConfigsEl.innerHTML = '';
             tunerState.currentStringTargets.forEach((target, index) => {
@@ -809,24 +892,19 @@
             const freq = getFrequencyFromNote(note, octave, tunerState.globalTranspose);
             
             tunerState.currentStringTargets[index] = { note, octave, freq };
-            // Also update base target to keep consistency if user switches transpose later
             tunerState.baseStringTargets[index] = { note, octave };
         }
 
-        // 2. Global Transpose Logic
         function changeGlobalTranspose(delta) {
             tunerState.globalTranspose += delta;
             
-            // Update Text
             let text = "Стандарт (0)";
             if (tunerState.globalTranspose > 0) text = `+${tunerState.globalTranspose} полутона`;
             if (tunerState.globalTranspose < 0) text = `${tunerState.globalTranspose} полутонов`;
             transposeValueEl.textContent = text;
 
-            // Recalculate all frequencies
             calculateCurrentTargets();
             
-            // Update Selectors UI to match new targets
             const selects = document.querySelectorAll('.string-select');
             selects.forEach((select, idx) => {
                 const target = tunerState.currentStringTargets[idx];
@@ -849,7 +927,6 @@
             document.getElementById('modeGuitar').classList.toggle('action-btn', mode !== 'guitar');
         }
 
-        // 3. Audio Handling
         async function toggleMicrophone() {
             if (tunerState.isListening) {
                 stopMicrophone();
@@ -899,9 +976,9 @@
             tunerStatusEl.textContent = "";
             tunerNeedleEl.style.transform = "translateX(-50%) rotate(0deg)";
             tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+            volumeMeterFill.style.width = "0%";
         }
 
-        // 4. Pitch Detection (Autocorrelation)
         function autoCorrelate(buf, sampleRate) {
             let SIZE = buf.length;
             let rms = 0;
@@ -911,7 +988,8 @@
                 rms += val * val;
             }
             rms = Math.sqrt(rms / SIZE);
-            if (rms < 0.01) return -1;
+            // Этот порог теперь управляется внешним шумоподавлением, здесь оставляем минимальный
+            if (rms < 0.005) return -1;
 
             let r1 = 0, r2 = SIZE - 1, thres = 0.2;
             for (let i = 0; i < SIZE / 2; i++) {
@@ -950,9 +1028,8 @@
             return sampleRate / T0;
         }
 
-        // 5. Animation Loop with Smoothing Buffer
         let freqBuffer = [];
-        const BUFFER_SIZE = 10; // Усредняем последние 10 кадров
+        const BUFFER_SIZE = 10;
 
         function updatePitch() {
             if (!tunerState.isListening) return;
@@ -960,77 +1037,102 @@
             const buf = new Float32Array(tunerState.analyser.fftSize);
             tunerState.analyser.getFloatTimeDomainData(buf);
             
-            const ac = autoCorrelate(buf, tunerState.audioContext.sampleRate);
-            
-            if (ac !== -1 && ac > 50 && ac < 2000) { // Valid frequency range
-                freqBuffer.push(ac);
-                if (freqBuffer.length > BUFFER_SIZE) {
-                    freqBuffer.shift();
-                }
+            // 1. Calculate RMS for Volume Meter & Noise Gate
+            let rms = 0;
+            for (let i = 0; i < buf.length; i++) {
+                rms += buf[i] * buf[i];
             }
+            rms = Math.sqrt(rms / buf.length);
 
-            // Calculate average from buffer
-            if (freqBuffer.length > 0) {
-                const sum = freqBuffer.reduce((a, b) => a + b, 0);
-                const smoothFreq = sum / freqBuffer.length;
+            // 2. Update Volume Meter UI
+            // Map RMS (0 to ~0.5) to percentage. Cap at 100%.
+            let volumePercent = Math.min((rms / 0.3) * 100, 100);
+            volumeMeterFill.style.width = `${volumePercent}%`;
+            
+            // Color change based on volume
+            if (volumePercent > 80) volumeMeterFill.style.backgroundColor = "var(--tuner-red)";
+            else if (volumePercent > 50) volumeMeterFill.style.backgroundColor = "var(--tuner-yellow)";
+            else volumeMeterFill.style.backgroundColor = "var(--volume-bar-fill)";
 
-                const noteNum = Math.round(12 * (Math.log(smoothFreq / 440) / Math.log(2)) + 69);
-                const noteName = CHROMATIC_SCALE[noteNum % 12];
+            // 3. NOISE GATE CHECK
+            if (rms < tunerState.noiseGateThreshold) {
+                // Sound is too quiet (background noise)
+                // Clear display but keep needle centered or hidden
+                tunerNoteEl.textContent = "--";
+                tunerFreqEl.textContent = "0 Hz";
+                tunerStatusEl.textContent = "";
+                tunerNeedleEl.style.transform = "translateX(-50%) rotate(0deg)";
+                tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
                 
-                // Determine Target based on mode
-                let targetFreq = 440 * Math.pow(2, (noteNum - 69) / 12);
-                let targetNoteName = noteName;
-                let cents = 0;
+                // Reset buffer to avoid old data affecting next note
+                freqBuffer = []; 
+            } else {
+                // Sound is loud enough, process pitch
+                const ac = autoCorrelate(buf, tunerState.audioContext.sampleRate);
+                
+                if (ac !== -1 && ac > 50 && ac < 2000) {
+                    freqBuffer.push(ac);
+                    if (freqBuffer.length > BUFFER_SIZE) {
+                        freqBuffer.shift();
+                    }
+                }
 
-                if (tunerState.mode === 'guitar') {
-                    let closestDist = Infinity;
-                    let closestTarget = null;
+                if (freqBuffer.length > 0) {
+                    const sum = freqBuffer.reduce((a, b) => a + b, 0);
+                    const smoothFreq = sum / freqBuffer.length;
+
+                    const noteNum = Math.round(12 * (Math.log(smoothFreq / 440) / Math.log(2)) + 69);
+                    const noteName = CHROMATIC_SCALE[noteNum % 12];
                     
-                    tunerState.currentStringTargets.forEach(t => {
-                        const dist = Math.abs(t.freq - smoothFreq);
-                        if (dist < closestDist) {
-                            closestDist = dist;
-                            closestTarget = t;
-                        }
-                    });
+                    let targetFreq = 440 * Math.pow(2, (noteNum - 69) / 12);
+                    let targetNoteName = noteName;
+                    let cents = 0;
 
-                    if (closestTarget && closestDist < 60) { 
-                        targetFreq = closestTarget.freq;
-                        targetNoteName = closestTarget.note;
-                        // Recalculate cents specifically against this target
-                        cents = 1200 * Math.log2(smoothFreq / targetFreq);
+                    if (tunerState.mode === 'guitar') {
+                        let closestDist = Infinity;
+                        let closestTarget = null;
+                        
+                        tunerState.currentStringTargets.forEach(t => {
+                            const dist = Math.abs(t.freq - smoothFreq);
+                            if (dist < closestDist) {
+                                closestDist = dist;
+                                closestTarget = t;
+                            }
+                        });
+
+                        if (closestTarget && closestDist < 60) { 
+                            targetFreq = closestTarget.freq;
+                            targetNoteName = closestTarget.note;
+                            cents = 1200 * Math.log2(smoothFreq / targetFreq);
+                        } else {
+                            cents = 1200 * Math.log2(smoothFreq / targetFreq);
+                        }
                     } else {
-                        // Fallback to chromatic cents if far from any string target
                         cents = 1200 * Math.log2(smoothFreq / targetFreq);
                     }
-                } else {
-                    cents = 1200 * Math.log2(smoothFreq / targetFreq);
-                }
 
-                // Update UI
-                tunerNoteEl.textContent = targetNoteName;
-                tunerFreqEl.textContent = Math.round(smoothFreq) + " Hz";
-                
-                // Needle Logic
-                let rotation = cents * 0.9; 
-                if (rotation > 45) rotation = 45;
-                if (rotation < -45) rotation = -45;
+                    tunerNoteEl.textContent = targetNoteName;
+                    tunerFreqEl.textContent = Math.round(smoothFreq) + " Hz";
+                    
+                    let rotation = cents * 0.9; 
+                    if (rotation > 45) rotation = 45;
+                    if (rotation < -45) rotation = -45;
 
-                tunerNeedleEl.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+                    tunerNeedleEl.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
 
-                // Status & Color
-                if (Math.abs(cents) < 5) {
-                    tunerStatusEl.textContent = "В норме";
-                    tunerStatusEl.className = "tuner-status status-in-tune";
-                    tunerNeedleEl.style.backgroundColor = "var(--tuner-green)";
-                } else if (cents < 0) {
-                    tunerStatusEl.textContent = "Ниже (Flat)";
-                    tunerStatusEl.className = "tuner-status status-flat";
-                    tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
-                } else {
-                    tunerStatusEl.textContent = "Выше (Sharp)";
-                    tunerStatusEl.className = "tuner-status status-sharp";
-                    tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+                    if (Math.abs(cents) < 5) {
+                        tunerStatusEl.textContent = "В норме";
+                        tunerStatusEl.className = "tuner-status status-in-tune";
+                        tunerNeedleEl.style.backgroundColor = "var(--tuner-green)";
+                    } else if (cents < 0) {
+                        tunerStatusEl.textContent = "Ниже (Flat)";
+                        tunerStatusEl.className = "tuner-status status-flat";
+                        tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+                    } else {
+                        tunerStatusEl.textContent = "Выше (Sharp)";
+                        tunerStatusEl.className = "tuner-status status-sharp";
+                        tunerNeedleEl.style.backgroundColor = "var(--tuner-red)";
+                    }
                 }
             }
 
