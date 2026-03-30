@@ -591,7 +591,7 @@
          */
         const CHROMATIC_SCALE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
         const BUTTON_NOTES = CHROMATIC_SCALE.slice().sort((a, b) => a.localeCompare(b));
-        const OPEN_STRINGS = ['E', 'A', 'D', 'G', 'B', 'E'];
+        const OPEN_STRINGS = ['E', 'B', 'G', 'D', 'A', 'E'];
         const TOTAL_FRETS = 15;
 
         // Проверка на мобильное устройство
@@ -744,7 +744,7 @@
         function renderFretboard() {
             OPEN_STRINGS.forEach((openNote, stringIndex) => {
                 const stringRow = document.createElement('div');
-                stringRow.className = `string-row string-${6 - stringIndex}`;
+                stringRow.className = `string-row string-${stringIndex + 1}`;
                 for (let fret = 0; fret <= TOTAL_FRETS; fret++) {
                     const cell = document.createElement('div');
                     cell.className = 'fret-cell';
@@ -755,9 +755,9 @@
                     if (isSharp(noteName)) noteDot.classList.add('sharp-note');
                     noteDot.textContent = noteName;
                     noteDot.dataset.note = noteName;
-                    noteDot.dataset.string = 6 - stringIndex;
+                    noteDot.dataset.string = stringIndex + 1;
                     noteDot.dataset.fret = fret;
-                    noteDot.onclick = (e) => handleNoteClick(e, noteName, 6 - stringIndex, fret);
+                    noteDot.onclick = (e) => handleNoteClick(e, noteName, stringIndex + 1, fret);
                     cell.appendChild(noteDot);
                     stringRow.appendChild(cell);
                 }
@@ -865,7 +865,7 @@
                 
                 const label = document.createElement('div');
                 label.className = 'string-label';
-                label.textContent = `Струна ${6 - index}`;
+                label.textContent = `Струна ${index + 1}`;
                 
                 const select = document.createElement('select');
                 select.className = 'string-select';
@@ -930,12 +930,22 @@
         }
 
         function setTunerMode(mode) {
-            tunerState.mode = mode;
-            document.getElementById('modeChromatic').classList.toggle('primary', mode === 'chromatic');
-            document.getElementById('modeGuitar').classList.toggle('primary', mode === 'guitar');
-            document.getElementById('modeChromatic').classList.toggle('action-btn', mode !== 'chromatic');
-            document.getElementById('modeGuitar').classList.toggle('action-btn', mode !== 'guitar');
-        }
+			tunerState.mode = mode;
+			
+			const chromaticBtn = document.getElementById('modeChromatic');
+			const guitarBtn = document.getElementById('modeGuitar');
+			
+			// Сбрасываем обе кнопки
+			chromaticBtn.classList.remove('primary');
+			guitarBtn.classList.remove('primary');
+			
+			// Добавляем primary только активной
+			if (mode === 'chromatic') {
+				chromaticBtn.classList.add('primary');
+			} else {
+				guitarBtn.classList.add('primary');
+			}
+		}
 
         async function toggleMicrophone() {
             if (tunerState.isListening) {
